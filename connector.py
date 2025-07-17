@@ -16,8 +16,8 @@ import mathutils
 import os
 
 # --- PROPERTY GROUP DEFINITION ---
-# Defines a custom data structure that can be used in lists (CollectionProperty).
-# A simple container for an integer, used to store face indices.
+# Defines a custom data structure that can be used in lists (CollectionProperty)
+# A simple container for an integer, used to store face indices
 class FaceIndexPropertyGroup(PropertyGroup):
     """A custom property group to store a single integer."""
     index: IntProperty(name="Face Index")
@@ -40,23 +40,23 @@ def export_connector_as_obj(filepath, connector_obj):
 
 
 # --- LIVE VALIDATION LOGIC ---
-# Pprovides immediate feedback to the user about their selections.
+# Provides immediate feedback to the user about their selections
 def validate_selection_util(scene, surface_index):
     """
     Analyzes a stored selection and returns its status ('VALID', 'INVALID', 'UNSET')
     and a human-readable message. This is the core validation logic.
     """
-    # Determine which surface (1 or 2) to check based on the input.
+    # Determine which surface (1 or 2) to check based on the input
     if surface_index == 1:
         obj_name, faces = scene.connector_obj_1, scene.connector_surfaces_1
     else:  # surface_index == 2
         obj_name, faces = scene.connector_obj_2, scene.connector_surfaces_2
 
-    # First, check if a surface has been set at all.
+    # First, check if a surface has been set at all
     if not obj_name or not faces:
         return 'UNSET', "Not set"
         
-    # Check if the object the user selected still exists in the scene.
+    # Check if the object the user selected still exists in the scene
     obj = bpy.data.objects.get(obj_name)
     if not obj:
         return 'INVALID', f"Original object '{obj_name}' not found."
@@ -117,13 +117,13 @@ def validate_selection_util(scene, surface_index):
             bm_orig.free()
             return 0
         
-        # Manually copy the geometry to a temporary bmesh to analyze it in isolation.
+        # Manually copy the geometry to a temporary bmesh to analyze it in isolation
         bm_temp = bmesh.new()
-        vmap = {}  # Maps original vertex indices to new vertices.
+        vmap = {}  # Maps original vertex indices to new vertices
         
-        # This loop rebuilds the selected faces in the temporary bmesh.
+        # This loop rebuilds the selected faces in the temporary bmesh
         # The 'vmap' dictionary is important to ensure that vertices shared
-        # by multiple faces are only created once.
+        # by multiple faces are only created once
         for f in faces_to_copy:
             new_face_verts = []
             for v in f.verts:
@@ -133,38 +133,38 @@ def validate_selection_util(scene, surface_index):
             try:
                 bm_temp.faces.new(new_face_verts)
             except ValueError:
-                # This can happen if faces are degenerate; ignore them for validation.
+                # This can happen if faces are degenerate; ignore them for validation
                 pass
         bm_orig.free()
 
-        # Find the boundaries of the new temporary mesh by "crawling" the edges.
-        # A boundary edge is one that is not manifold (not connected to exactly 2 faces).
+        # Find the boundaries of the new temporary mesh by "crawling" the edges
+        # A boundary edge is one that is not manifold (not connected to exactly 2 faces)
         boundary_edges = set()
         for e in bm_temp.edges:
             if not e.is_manifold:
                 boundary_edges.add(e)
                 
         num_loops = 0
-        # This loop continues until all boundary edges have been visited.
+        # This loop continues until all boundary edges have been visited
         while boundary_edges:
-            # Each time this outer loop starts, we have found a new, separate boundary.
+            # Each time this outer loop starts, we have found a new, separate boundary
             num_loops += 1
             
-            # Start a "crawl" from an arbitrary edge.
+            # Start a "crawl" from an arbitrary edge
             path = [boundary_edges.pop()]
             while path:
                 current_edge = path.pop()
                 
-                # Find all connected boundary edges and add them to the path to be processed.
+                # Find all connected boundary edges and add them to the path to be processed
                 for v in current_edge.verts:
                     for linked_e in v.link_edges:
                         if linked_e in boundary_edges:
                             boundary_edges.remove(linked_e)
                             path.append(linked_e)
-        bm_temp.free() # Clean up the temporary bmesh from memory.
+        bm_temp.free() # Clean up the temporary bmesh from memory
         return num_loops
 
-    # Create a set of face indices for faster lookups.
+    # Create a set of face indices for faster lookups
     face_indices = set()
     for f in faces:
         face_indices.add(f.index)
@@ -176,15 +176,15 @@ def validate_selection_util(scene, surface_index):
         if num_components > 1:
             return 'INVALID', f"Face Loop must be one connected strip. Found {num_components} groups."
     
-    # Add a specific check for Simple Bridge mode to enforce single-face selections.
+    # Add a specific check for Simple Bridge mode to enforce single-face selections
     if topo_type == 'SIMPLE_BRIDGE':
         if len(faces) > 1:
             return 'INVALID', "Simple Bridge only supports a single face per surface."
     
-    # Get the number of boundary loops from our selection.
+    # Get the number of boundary loops from our selection
     num_loops = get_loop_count(obj, face_indices)
     
-    # Check if the number of found loops matches the requirement for the selected algorithm.
+    # Check if the number of found loops matches the requirement for the selected algorithm
     if topo_type in ['SIMPLE_BRIDGE', 'CLOSED_CAP']:
         if num_loops == 1:
             return 'VALID', "1 boundary loop found."
@@ -250,27 +250,27 @@ class OBJECT_OT_SelectConnectorSurface(bpy.types.Operator):
     It identifies the selected faces on the active object in Edit Mode and saves their
     index numbers into a list in the scene for the main operator to use later.
     """
-    # The bl_idname is the unique identifier for this operator in Blender.
+    # The bl_idname is the unique identifier for this operator in Blender
     bl_idname = "object.select_connector_surface"
     bl_label = "Set Connector Surface"
     bl_options = {'REGISTER', 'UNDO'}
 
-    # This property is set by the button in the UI (1 or 2) to know which list to save to.
+    # This property is set by the button in the UI (1 or 2) to know which list to save to
     surface_index: IntProperty()
 
     def execute(self, context):
         # --- 1. Validation and Setup ---
         
-        # Ensure the user is in Edit Mode on a mesh object.
+        # Ensure the user is in Edit Mode on a mesh object
         obj = context.object
         if not (obj and obj.mode == 'EDIT' and obj.type == 'MESH'):
             self.report({'ERROR'}, "Active object must be a mesh in Edit Mode.")
             return {'CANCELLED'}
         
-        # Use BMesh to efficiently access mesh data.
+        # Use BMesh to efficiently access mesh data
         bm = bmesh.from_edit_mesh(obj.data)
         
-        # Get a list of the currently selected faces.
+        # Get a list of the currently selected faces
         selected_faces = []
         for f in bm.faces:
             if f.select:
@@ -283,28 +283,28 @@ class OBJECT_OT_SelectConnectorSurface(bpy.types.Operator):
         # --- 2. Store the Selection ---
         
         # Based on which button was pressed, store the object name and face indices
-        # in the correct list.
+        # in the correct list
         if self.surface_index == 1:
-            # Clear any previously stored data for this surface.
+            # Clear any previously stored data for this surface
             context.scene.connector_surfaces_1.clear()
             context.scene.connector_obj_1 = obj.name
             
-            # Add the index of each selected face to the list.
+            # Add the index of each selected face to the list
             for face in selected_faces:
                 context.scene.connector_surfaces_1.add().index = face.index
                 
         elif self.surface_index == 2:
-            # Clear any previously stored data for this surface.
+            # Clear any previously stored data for this surface
             context.scene.connector_surfaces_2.clear()
             context.scene.connector_obj_2 = obj.name
             
-            # Add the index of each selected face to the list.
+            # Add the index of each selected face to the list
             for face in selected_faces:
                 context.scene.connector_surfaces_2.add().index = face.index
         
         # --- 3. Finalize ---
         
-        # After storing the selection, immediately trigger the validation logic.
+        # After storing the selection, immediately trigger the validation logic
         run_validation(context)
         
         self.report({'INFO'}, f"Stored {len(selected_faces)} faces from {obj.name}.")
@@ -321,13 +321,13 @@ def get_boundary_loops_data(obj):
     if obj.type != 'MESH':
         return []
     
-    # Create a temporary BMesh from the object's mesh data to analyze it.
+    # Create a temporary BMesh from the object's mesh data to analyze it
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bm.edges.ensure_lookup_table()
     
-    # A boundary edge is an edge belonging to only one face.
-    # We gather all of them into a set for efficient processing.
+    # A boundary edge is an edge belonging to only one face
+    # We gather all of them into a set for efficient processing
     boundary_edges = set()
     for e in bm.edges:
         if e.is_boundary:
@@ -335,26 +335,26 @@ def get_boundary_loops_data(obj):
             
     all_loops_data = []
 
-    # This loop continues until all boundary edges have been visited.
+    # This loop continues until all boundary edges have been visited
     while boundary_edges:
-        # Start a "crawl" from an arbitrary edge.
+        # Start a "crawl" from an arbitrary edge
         start_edge = boundary_edges.pop()
         current_edge_loop = [start_edge]
         
-        # Trace the loop in one direction from the starting edge.
+        # Trace the loop in one direction from the starting edge
         v_curr = start_edge.verts[1]
         while True:
-            # Find the next connected boundary edge.
+            # Find the next connected boundary edge
             next_edge = next((e for e in v_curr.link_edges if e in boundary_edges), None)
             if not next_edge:
                 break
             
-            # Remove from set to avoid re-processing.
+            # Remove from set to avoid re-processing
             boundary_edges.remove(next_edge)
             current_edge_loop.append(next_edge)
             v_curr = next_edge.other_vert(v_curr)
             
-        # Trace in the other direction to complete the loop.
+        # Trace in the other direction to complete the loop
         v_curr = start_edge.verts[0]
         while True:
             next_edge = next((e for e in v_curr.link_edges if e in boundary_edges), None)
@@ -368,7 +368,7 @@ def get_boundary_loops_data(obj):
         if not current_edge_loop:
             continue
         
-        # Convert the ordered list of edges into an ordered list of vertices.
+        # Convert the ordered list of edges into an ordered list of vertices
         vert_list = [current_edge_loop[0].verts[0]]
         last_vert = vert_list[0]
         for edge in current_edge_loop:
@@ -377,15 +377,15 @@ def get_boundary_loops_data(obj):
             last_vert = next_vert
         vert_list.pop() # Remove duplicated vertex at the end.
         
-        # Convert vertex local coordinates to world coordinates for accurate calculations.
+        # Convert vertex local coordinates to world coordinates for accurate calculations
         coords = []
         for v in vert_list:
             coords.append(obj.matrix_world @ v.co)
         
-        # Calculate the loop's perimeter to help with pairing later.
+        # Calculate the loop's perimeter to help with pairing later
         size = 0
         for i in range(len(coords)):
-            # Compare each vertex to the previous one in the list to get edge length.
+            # Compare each vertex to the previous one in the list to get edge length
             size += (coords[i] - coords[i-1]).length
             
         all_loops_data.append({"coords": coords, "size": size})
@@ -402,15 +402,15 @@ def resample_loop_coords(coords, target_count):
     if points < 2:
         return [coords[0]] * target_count if coords else []
     
-    # 1. Parameterize the loop by measuring the cumulative distance at each original vertex.
+    # 1. Parameterize the loop by measuring the cumulative distance at each original vertex
     lengths = []
     for i in range(points):
-        # The modulo operator (%) ensures the last vertex connects back to the first.
+        # The modulo operator (%) ensures the last vertex connects back to the first
         lengths.append((coords[i] - coords[(i + 1) % points]).length)
         
     total_length = sum(lengths)
     if total_length == 0:
-        return [coords[0]] * target_count # Handle degenerate case (zero-size loop).
+        return [coords[0]] * target_count # Handle degenerate case (zero-size loop)
         
     cumulative = [0.0]
     current_dist = 0
@@ -418,18 +418,18 @@ def resample_loop_coords(coords, target_count):
         current_dist += length
         cumulative.append(current_dist)
     
-    # 2. Create new points by stepping evenly along the total length.
+    # 2. Create new points by stepping evenly along the total length
     new_coords = []
     step = total_length / target_count
     for i in range(target_count):
         target_dist = i * step
         
-        # Find which original segment the new point falls on.
+        # Find which original segment the new point falls on
         segment_idx = 0
         while segment_idx < points - 1 and target_dist >= cumulative[segment_idx + 1]:
             segment_idx += 1
             
-        # Interpolate between the start and end points of that segment to find the new point's location.
+        # Interpolate between the start and end points of that segment to find the new point's location
         v1 = coords[segment_idx]
         v2 = coords[(segment_idx + 1) % points]
         
@@ -458,13 +458,13 @@ def align_loops_by_cost(coords1, coords2):
     
     reversed_coords2 = list(reversed(coords2))
     
-    # Test every possible starting point on the second loop.
+    # Test every possible starting point on the second loop
     for offset in range(num_verts):
-        # Calculate the "cost" (sum of squared distances) for the loop as-is.
+        # Calculate the "cost" (sum of squared distances) for the loop as-is
         cost = 0
         for i in range(num_verts):
             v1 = coords1[i]
-            # The offset rotates the starting point of the second loop.
+            # The offset rotates the starting point of the second loop
             v2 = coords2[(i + offset) % num_verts]
             cost += (v1 - v2).length_squared
             
@@ -473,7 +473,7 @@ def align_loops_by_cost(coords1, coords2):
             best_offset = offset
             best_reversed = False
         
-        # Calculate the cost for the reversed loop.
+        # Calculate the cost for the reversed loop
         cost = 0
         for i in range(num_verts):
             v1 = coords1[i]
@@ -485,7 +485,7 @@ def align_loops_by_cost(coords1, coords2):
             best_offset = offset
             best_reversed = True
             
-    # Construct and return the best aligned loop configuration.
+    # Construct and return the best aligned loop configuration
     final_coords2 = reversed_coords2 if best_reversed else coords2
     return coords1, final_coords2[best_offset:] + final_coords2[:best_offset]
 
@@ -566,7 +566,7 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
         Helper function to duplicate a set of faces from an object
         and separate them into a new, independent object.
         """
-        # Ensure we are in Object Mode before switching objects.
+        # Ensure we are in Object Mode before switching objects
         if obj.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
             
@@ -575,14 +575,14 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
         context.view_layer.objects.active = obj
         bpy.ops.object.mode_set(mode='EDIT')
 
-        # Select the specific faces using the stored indices.
+        # Select the specific faces using the stored indices
         bm = bmesh.from_edit_mesh(obj.data)
         bm.faces.ensure_lookup_table()
         for f in bm.faces:
             f.select = f.index in face_indices
         bmesh.update_edit_mesh(obj.data)
 
-        # Keep track of objects in the scene before duplicating.
+        # Keep track of objects in the scene before duplicating
         objects_before = set(context.scene.objects)
         
         # Duplicate the selected faces and separate them.
@@ -590,13 +590,13 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
         bpy.ops.mesh.separate(type='SELECTED')
         bpy.ops.object.mode_set(mode='OBJECT')
 
-        # Find the newly created object by comparing the scene contents.
+        # Find the newly created object by comparing the scene contents
         objects_after = set(context.scene.objects)
         new_obj = (objects_after - objects_before).pop()
         
         new_obj.name = f"{obj.name}_{part_name}"
         
-        # Select and make the new object active for clarity.
+        # Select and make the new object active for clarity
         bpy.ops.object.select_all(action='DESELECT')
         new_obj.select_set(True)
         context.view_layer.objects.active = new_obj
@@ -604,7 +604,7 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
 
     def execute_simple_bridge(self, context, end_cap_1, end_cap_2):
         """Handles the 'Simple Bridge' algorithm."""
-        # Join the two end caps into a single object.
+        # Join the two end caps into a single object
         bpy.ops.object.select_all(action='DESELECT')
         end_cap_1.select_set(True)
         end_cap_2.select_set(True)
@@ -615,7 +615,7 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
         final_obj.name = "Simple_Connector"
         context.scene.connector_obj = final_obj.name
 
-        # Use Blender's robust Bridge Edge Loops tool to generate the connection.
+        # Use Blender's robust Bridge Edge Loops tool to generate the connection
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.mesh.select_mode(type='EDGE')
@@ -640,14 +640,14 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
     
     def execute_advanced_loft(self, context, end_cap_1, end_cap_2):
         """Handles the 'Advanced Loft' algorithms (Face Loop and Closed Cap)."""
-        # Get the boundary data from the temporary end caps.
+        # Get the boundary data from the temporary end caps
         loops1_data = get_boundary_loops_data(end_cap_1)
         loops2_data = get_boundary_loops_data(end_cap_2)
         
         if not loops1_data or not loops2_data:
             raise Exception("Could not find boundary loops on duplicated parts.")
 
-        # Pair the loops from each surface based on the chosen algorithm.
+        # Pair the loops from each surface based on the chosen algorithm
         topology_type = context.scene.connector_topology_type
         unprocessed_pairs = []
         
@@ -657,7 +657,7 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
             if len(loops1_data) != len(loops2_data):
                 self.report({'WARNING'}, f"Mismatched boundary count.")
             
-            # Pair smallest loop with smallest, largest with largest, etc.
+            # Pair smallest loop with smallest, largest with largest, etc
             limit = min(len(loops1_data), len(loops2_data))
             for i in range(limit):
                 unprocessed_pairs.append((loops1_data[i]["coords"], loops2_data[i]["coords"]))
@@ -669,13 +669,13 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
         if not unprocessed_pairs:
             raise Exception("No valid loop pairs found.")
 
-        # Build the bridge geometry in a new, clean BMesh.
+        # Build the bridge geometry in a new, clean BMesh
         bm = bmesh.new()
         num_segments = context.scene.connector_number_segments
         num_cuts = context.scene.connector_number_cuts
         
         for coords1, coords2 in unprocessed_pairs:
-            # Resample, Align, and Interpolate to get the final vertex positions.
+            # Resample, Align, and Interpolate to get the final vertex positions
             if len(coords1) != len(coords2):
                 max_count = max(len(coords1), len(coords2))
                 coords1 = resample_loop_coords(coords1, max_count)
@@ -685,10 +685,10 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
             all_profiles = []
             total_steps = (num_segments + 1) * (num_cuts + 1)
             
-            # Create all the vertices for the bridge profiles.
+            # Create all the vertices for the bridge profiles
             for step in range(total_steps + 1):
                 linear_t = step / total_steps if total_steps > 0 else 0.0
-                final_t = linear_t # Possibility to expand towards other interpolation functions.
+                final_t = linear_t # Possibility to expand towards other interpolation functions
                 
                 profile_coords = []
                 for i in range(len(v1_coords)):
@@ -699,7 +699,7 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
                     profile_verts.append(bm.verts.new(co))
                 all_profiles.append(profile_verts)
                 
-            # Create faces between the generated profiles.
+            # Create faces between the generated profiles
             for p_idx in range(len(all_profiles) - 1):
                 loop_a = all_profiles[p_idx]
                 loop_b = all_profiles[p_idx+1]
@@ -713,14 +713,14 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
                     except ValueError:
                         print(f"Warning: Could not create face.")
 
-        # Create a temporary bridge object from the BMesh.
+        # Create a temporary bridge object from the BMesh
         bridge_mesh = bpy.data.meshes.new("Connector_Bridge_Mesh")
         bm.to_mesh(bridge_mesh)
         bm.free()
         bridge_obj = bpy.data.objects.new("Connector_Bridge", bridge_mesh)
         context.collection.objects.link(bridge_obj)
         
-        # Join the end caps and the bridge into one object.
+        # Join the end caps and the bridge into one object
         bpy.ops.object.select_all(action='DESELECT')
         end_cap_1.select_set(True)
         end_cap_2.select_set(True)
@@ -732,7 +732,7 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
         final_obj.name = "Advanced_Connector"
         bpy.context.scene.connector_obj = final_obj.name
     
-        # Weld the seams to create a single, continuous mesh.
+        # Weld the seams to create a single, continuous mesh
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='SELECT')
         bpy.ops.mesh.remove_doubles(threshold=0.0001)
@@ -744,12 +744,12 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
         return final_obj
         
     def execute(self, context):
-        # Ensure we start in Object Mode to prevent context errors.
+        # Ensure we start in Object Mode to prevent context errors
         if context.active_object and context.active_object.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
 
         # --- 1. Pre-generation Validation ---
-        # First, check the status set by the live validation system.
+        # First, check the status set by the live validation system
         # This implicitly handles the overlap case because the status will be 'INVALID'
         status1 = context.scene.connector_status_1
         status2 = context.scene.connector_status_2
@@ -757,7 +757,7 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
             self.report({'ERROR'}, f"Invalid selection(s). Please check UI for errors.")
             return {'CANCELLED'}
 
-        # Get the original objects and face selections from the scene.
+        # Get the original objects and face selections from the scene
         orig_obj1_name = context.scene.connector_obj_1
         orig_obj2_name = context.scene.connector_obj_2
         orig_obj1 = bpy.data.objects.get(orig_obj1_name)
@@ -775,16 +775,16 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
         final_obj = None
         
         # A 'try...finally' block ensures that the cleanup code at the end
-        # will run even if an error occurs during the operation.
+        # will run even if an error occurs during the operation
         try:
             # --- 2. Create End Caps ---
-            # All modes start by creating temporary end caps from the selected faces.
-            # This ensures the original objects are never modified.
+            # All modes start by creating temporary end caps from the selected faces
+            # This ensures the original objects are never modified
             end_cap_1 = self.duplicate_face_loop(context, orig_obj1, faces1, "EndCap1")
             end_cap_2 = self.duplicate_face_loop(context, orig_obj2, faces2, "EndCap2")
             
             # --- 3. Execute Selected Algorithm ---
-            # Branch to the correct algorithm based on the user's choice.
+            # Branch to the correct algorithm based on the user's choice
             if topology_type == 'SIMPLE_BRIDGE':
                 final_obj = self.execute_simple_bridge(context, end_cap_1, end_cap_2)
             else: 
@@ -797,7 +797,7 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
             
         except Exception as e:
             self.report({'ERROR'}, f"Operation failed: {e}")
-            # Clean up temporary objects if an error occurs.
+            # Clean up temporary objects if an error occurs
             if 'end_cap_1' in locals() and end_cap_1.name in bpy.data.objects:
                 bpy.data.objects.remove(end_cap_1)
             if 'end_cap_2' in locals() and end_cap_2.name in bpy.data.objects:
@@ -806,8 +806,8 @@ class OBJECT_OT_GenerateConnector(bpy.types.Operator):
             
         finally:
             # --- 4. FINALIZE AND SELECT NEW OBJECT ---
-            # Data is not cleared, but selection is not restored.
-            # Instead, we select the new connector.
+            # Data is not cleared, but selection is not restored
+            # Instead, we select the new connector
             
             if context.object and context.object.mode != 'OBJECT':
                 bpy.ops.object.mode_set(mode='OBJECT')
@@ -885,10 +885,10 @@ class OBJECT_OT_ExportConnector(bpy.types.Operator):
 class OBJECT_PT_ObjectConnectorPanel(bpy.types.Panel):
     """Creates the addon's UI panel in the 3D View's sidebar."""
     
-    # The bl_idname must be unique to this panel.
-    # The bl_label is the title of the panel shown in the UI.
-    # The bl_category is the tab name in the sidebar (the "N-Panel").
-    # The bl_space_type and bl_region_type define where the panel can appear.
+    # The bl_idname must be unique to this panel
+    # The bl_label is the title of the panel shown in the UI
+    # The bl_category is the tab name in the sidebar (the "N-Panel")
+    # The bl_space_type and bl_region_type define where the panel can appear
     bl_idname = "OBJECT_PT_ObjectConnectorPanel"
     bl_label = "Object Connector"
     bl_category = "Tool"
@@ -899,7 +899,7 @@ class OBJECT_PT_ObjectConnectorPanel(bpy.types.Panel):
         """This method is called by Blender to draw the panel's contents."""
         layout, scene = self.layout, context.scene
         
-        # Use a single main column for a clean, sequential layout.
+        # Use a single main column for a clean, sequential layout
         col = layout.column(align=True)
         
         # --- Section 1: Inputs ---
@@ -913,13 +913,13 @@ class OBJECT_PT_ObjectConnectorPanel(bpy.types.Panel):
         status1 = scene.connector_status_1
         is_valid = (status1 == 'VALID')
         
-        # The 'alert' property colors the row red if the selection is not valid.
+        # The 'alert' property colors the row red if the selection is not valid
         row.alert = not is_valid
         
-        # Display an icon based on the validation status.
+        # Display an icon based on the validation status
         row.label(text="", icon='CHECKMARK' if is_valid else 'ERROR' if status1 == 'INVALID' else 'CANCEL')
         sub = row.row()
-        sub.enabled = False # Make the text field read-only.
+        sub.enabled = False # Make the text field read-only
         sub.prop(scene, "connector_obj_1", text="Obj 1")
 
         # --- Draw Object 2 Property with Status Indication ---
@@ -934,7 +934,7 @@ class OBJECT_PT_ObjectConnectorPanel(bpy.types.Panel):
         
         # --- Dedicated Error Box ---
         # If either selection is invalid, create a red error box
-        # and display the specific error message(s).
+        # and display the specific error message(s)
         if scene.connector_status_1 == 'INVALID' or scene.connector_status_2 == 'INVALID':
             box = layout.box()
             box.alert = True
@@ -949,13 +949,13 @@ class OBJECT_PT_ObjectConnectorPanel(bpy.types.Panel):
         col.label(text="2. Choose Algorithm & Settings:")
         col.prop(scene, "connector_topology_type", text="")
         
-        # Determine if the advanced options should be interactive.
+        # Determine if the advanced options should be interactive
         is_advanced_mode = (scene.connector_topology_type != 'SIMPLE_BRIDGE')
         
-        # A box for the advanced settings, which can be greyed out.
+        # A box for the advanced settings, which can be greyed out
         box = col.box()
     
-        #The 'active' property disables the UI elements inside the box.
+        #The 'active' property disables the UI elements inside the box
         box.active = is_advanced_mode
         
         sub_col = box.column()
@@ -979,8 +979,8 @@ class OBJECT_PT_ObjectConnectorPanel(bpy.types.Panel):
         col.operator("object.export_connector", text="Export Connector", icon='EXPORT')
 
 # --- REGISTRATION ---
-# A tuple containing all the classes that need to be registered with Blender.
-# This makes the register() and unregister() functions cleaner.
+# A tuple containing all the classes that need to be registered with Blender
+# This makes the register() and unregister() functions cleaner
 classes = (
     FaceIndexPropertyGroup,
     OBJECT_OT_SelectConnectorSurface,
